@@ -25,7 +25,7 @@ decode = lambda idx: itos[idx]
 blockSize = 31
 xs = []
 ys = []
-for line in file[:10000]:
+for line in file:
     context = ['<S>'] * blockSize
     string = list(line) + ['<S>']
     for ch2 in string:
@@ -56,11 +56,11 @@ print(f"Xtst: {Xtst.shape}, Ytst: {Ytst.shape}")
 gen = torch.Generator().manual_seed(12345)
 nNeurons = (64, 64, nUniqueChars)
 nEmbedding = 16
-nBatch = 409
+nBatch = 4096
 lr = 0.01
 lrDecay = 0.98
 lrDecayStep = 100
-epochs = 2000
+epochs = 100000
 momentum = nBatch / Xtr.shape[0]
 tanhGain = 5/3
 kaimin_init_w1 = tanhGain / ((blockSize * nEmbedding) ** 0.5)
@@ -188,7 +188,7 @@ for _ in range(epochs):
     b3 -= lr * db3
 
     if _ % lrDecayStep == 0: lr *= lrDecay
-    if _ % 20 == 0: print(f"Training Loss: {loss.item()}")
+    if _ % 1000 == 0: print(f"Training Loss: {loss.item()}")
 
 
 print("Training Done!")
