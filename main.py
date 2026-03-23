@@ -184,7 +184,7 @@ params = {
     "freeParams": freeParams
 }
 
-torch.save({"params": params, "optim": optimizer.state_dict}, "./datasets/octagram_manual_backprop.pth")
+torch.save({"params": params, "optim": optimizer.state_dict}, "./datasets/32gram_param_configuration_optimized.pth")
 print("Trained weight configuration saved!")
 
 # Validation Results
