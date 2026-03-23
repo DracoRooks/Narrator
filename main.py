@@ -110,67 +110,39 @@ for _ in range(epochs):
     x = emb.view((-1, blockSize * nEmbedding))
     y = Ytr[ix]
 
-    # Atomic operations of 1st hidden layer
+    # Operations of 1st hidden layer
     h1prebn = x @ w1
-    bnmean1 = (nBatch ** -1) * h1prebn.sum(dim = 0, keepdim = True)
-    bndiff11 = h1prebn - bnmean1
-    bndiff21 = bndiff11 ** 2
-    bnvar1 = ((nBatch - 1) ** -1) * bndiff21.sum(dim = 0, keepdim = True)
-    bnstd1_inv = (bnvar1 + eps) ** -0.5
-    bnraw1 = bndiff11 * bnstd1_inv
+    bnmean1 = h1prebn.mean(dim = 0, keepdim = True)
+    bnvar1 = h1prebn.var(dim = 0, keepdim = True, unbiased = True)
+    bnstd1 = (bnvar1 + eps) ** 0.5
+    bnraw1 = (h1prebn - bnmean1) / bnstd1
     h1preact = bngain1 * bnraw1 + bnbias1
     h1 = h1preact.tanh()
 
-    # Atomic operations of 2st hidden layer
+    # Operations of 2st hidden layer
     h2prebn = h1 @ w2
-    bnmean2 = (nBatch ** -1) * h2prebn.sum(dim = 0, keepdim = True)
-    bndiff12 = h2prebn - bnmean2
-    bndiff22 = bndiff12 ** 2
-    bnvar2 = ((nBatch - 1) ** -1) * bndiff22.sum(dim = 0, keepdim = True)
-    bnstd2_inv = (bnvar2 + eps) ** -0.5
-    bnraw2 = bndiff12 * bnstd2_inv
+    bnmean2 = h2prebn.mean(dim = 0, keepdim = True)
+    bnvar2 = h2prebn.var(dim = 0, keepdim = True, unbiased = True)
+    bnstd2 = (bnvar2 + eps) ** 0.5
+    bnraw2 = (h2prebn - bnmean2) / bnstd2
     h2preact = bngain2 * bnraw2 + bnbias2
     h2 = h2preact.tanh()
 
     # Running approximations
-    with torch.no_grad():
-        bnmean1_running = (1 - momentum) * bnmean1_running + momentum * bnmean1
-        bnstd1_running = (1 - momentum) * bnstd1_running + momentum * (bnvar1 ** 0.5)
+    bnmean1_running = (1 - momentum) * bnmean1_running + momentum * bnmean1
+    bnstd1_running = (1 - momentum) * bnstd1_running + momentum * bnstd1
 
-        bnmean2_running = (1 - momentum) * bnmean2_running + momentum * bnmean2
-        bnstd2_running = (1 - momentum) * bnstd2_running + momentum * (bnvar2 ** 0.5)
+    bnmean2_running = (1 - momentum) * bnmean2_running + momentum * bnmean2
+    bnstd2_running = (1 - momentum) * bnstd2_running + momentum * bnstd2
 
-    # Atomic operations of output layer (softmax and loss calculation, basically)
+    # Operations of output layer
     logits: torch.Tensor = (h2 @ w3) + b3
-    logit_maxes = logits.max(dim = 1, keepdim = True).values
-    norm_logits = logits - logit_maxes
-    counts = norm_logits.exp()
-    counts_sum = counts.sum(dim = 1, keepdim = True)
-    counts_sum_inv = counts_sum ** -1
-    probs = counts * counts_sum_inv
-    logprobs = probs.log()
-    loss = -logprobs[range(nBatch), y].mean(dim = 0)
+    loss = func.cross_entropy(logits, y)
 
     # Backward Pass
-    dloss = torch.ones_like(loss)
-
-    dlogprobs = torch.zeros_like(logprobs)
-    dlogprobs[range(nBatch), y] = -1 / nBatch
-
-    dprobs = (1 / probs) * dlogprobs
-
-    dcounts_sum_inv = (counts * dprobs).sum(dim = 1, keepdim = True)
-    dcounts = counts_sum_inv * dprobs
-
-    dcounts_sum = -(counts_sum ** -2) * dcounts_sum_inv
-
-    dcounts += torch.ones_like(counts) * dcounts_sum
-
-    dnorm_logits = counts * dcounts
-    dlogits = dnorm_logits.clone()
-
-    dlogit_maxes = (-dnorm_logits).sum(dim = 1, keepdim = True)
-    dlogits += func.one_hot(logits.max(dim = 1).indices, num_classes = logits.shape[1]) * dlogit_maxes
+    dlogits = func.softmax(logits, dim = 1)
+    dlogits[range(nBatch), y] -= 1
+    dlogits /= nBatch
 
     dw3 = h2.T @ dlogits
     db3 = dlogits.sum(dim = 0)
@@ -178,46 +150,20 @@ for _ in range(epochs):
 
     dh2preact = (1.0 - (h2 ** 2)) * dh2
 
-    dbngain2 = (bnraw2 * dh2preact).sum(0, keepdim = True)
-    dbnbias2 = dh2preact.sum(0, keepdim = True)
-    dbnraw2 = bngain2 * dh2preact
+    dbngain2 = (bnraw2 * dh2preact).sum(dim = 0, keepdim = True)
+    dbnbias2 = dh2preact.sum(dim = 0, keepdim = True)
 
-    dbnstd2_inv = (bndiff12 * dbnraw2).sum(0, keepdim = True)
-    dbndiff12 = bnstd2_inv * dbnraw2
-
-    dbnvar2 = (-0.5 * (bnvar2 + eps) ** -1.5) * dbnstd2_inv
-
-    dbndiff22 = ((nBatch - 1) ** -1) * torch.ones_like(bndiff22) * dbnvar2
-
-    dbndiff12 += 2 * bndiff12 * dbndiff22
-
-    dbnmean2 = -dbndiff12.sum(0, keepdim = True)
-    dh2prebn = dbndiff12.clone()
-
-    dh2prebn += (nBatch ** -1) * torch.ones_like(h2prebn) * dbnmean2
+    dh2prebn = bngain2 * ((bnstd2 * nBatch) ** -1) * (nBatch * dh2preact - dh2preact.sum(0) - (nBatch / (nBatch - 1)) * bnraw2 * ((dh2preact * bnraw2).sum(0)))
 
     dw2 = h1.T @ dh2prebn
     dh1 = dh2prebn @ w2.T
 
     dh1preact = (1.0 - (h1 ** 2)) * dh1
 
-    dbngain1 = (bnraw1 * dh1preact).sum(0, keepdim = True)
-    dbnraw1 = bngain1 * torch.ones_like(bnraw1) * dh1preact
-    dbnbias1 = dh1preact.sum(0, keepdim = True)
+    dbngain1 = (bnraw1 * dh1preact).sum(dim = 0, keepdim = True)
+    dbnbias1 = dh1preact.sum(dim = 0, keepdim = True)
 
-    dbnstd1_inv = (bndiff11 * dbnraw1).sum(0, keepdim = True)
-    dbndiff11 = bnstd1_inv * torch.ones_like(bndiff11) * dbnraw1
-
-    dbnvar1 = (-0.5 * (bnvar1 + eps) ** -1.5) * dbnstd1_inv
-
-    dbndiff21 = ((nBatch - 1) ** -1) * torch.ones_like(bndiff21) * dbnvar1
-
-    dbndiff11 += 2 * bndiff11 * dbndiff21
-
-    dh1prebn = dbndiff11.clone()
-    dbnmean1 = -dbndiff11.sum(0, keepdim = True)
-
-    dh1prebn += (nBatch ** -1) * torch.ones_like(h1prebn) * dbnmean1
+    dh1prebn = bngain1 * ((bnstd1 * nBatch) ** -1) * (nBatch * dh1preact - dh1preact.sum(0) - (nBatch / (nBatch - 1)) * bnraw1 * ((dh1preact * bnraw1).sum(0)))
 
     dw1 = x.T @ dh1prebn
     dx = dh1prebn @ w1.T
