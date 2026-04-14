@@ -22,12 +22,12 @@ def loadBatch(split: str = 'train') -> tuple[torch.Tensor, torch.Tensor]:
 def estimateLoss(model: Model):
     lossEstimates = []
     for split in ['train', 'eval']:
-        model.train()
+        model.train() if split == 'train' else model.eval() if split == 'eval' else None
         lossi = torch.zeros(HyprParams.evalIters)
         for i in range(HyprParams.evalIters):
             x, y = loadBatch(split)
             logits, loss = model(x, y)
             lossi[i] = loss
-        model.eval()
         lossEstimates.append(lossi.mean(dim = 0).item())
-    print(f"Train Loss Estimate: {lossEstimates[0]}, Val Loss Estimate: {lossEstimates[1]}")
+    model.train()
+    return f"Train Loss Estimate: {lossEstimates[0]:.4f}, Val Loss Estimate: {lossEstimates[1]:.4f}"

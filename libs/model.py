@@ -17,7 +17,7 @@ class SelfAttention(nn.Module):
         self.value = nn.Linear(HyprParams.nEmbed, sizeHead, bias = False) # (T, C)
         self.register_buffer('tril', torch.tril(torch.ones((HyprParams.nBlock, HyprParams.nBlock)))) # (T, T)
 
-        self.dropout = nn.Dropout(HyprParams.nDrop)
+        self.dropout = nn.Dropout(HyprParams.pDrop)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, T, C = x.shape
@@ -45,7 +45,7 @@ class MultiHeadAttention(nn.Module):
         self.heads = nn.ModuleList([SelfAttention(sizeHead) for _ in range(nHeads)])
         self.projection = nn.Linear(HyprParams.nEmbed, HyprParams.nEmbed)
 
-        self.dropout = nn.Dropout(HyprParams.nDrop)
+        self.dropout = nn.Dropout(HyprParams.pDrop)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = torch.cat([head(x) for head in self.heads], dim = -1)
@@ -65,7 +65,7 @@ class FeedForward(nn.Module):
             nn.Linear(fanIn, 8 * fanOut),
             nn.PReLU(init = 0.1),
             nn.Linear(8 * fanOut, fanOut),
-            nn.Dropout(HyprParams.nDrop),
+            nn.Dropout(HyprParams.pDrop),
         )
 
 
@@ -112,9 +112,9 @@ class Model(nn.Module):
         posEmbed = self.tokenEmbeddingTable(idx) # (B, T, nEmbed)
         x = tokEmbed + posEmbed # (B, T, nEmbed)
 
-        preLogits = self.blocks(x) # (B, T, nUniqueChars)
-        logits = self.layerNorm(preLogits)
-        logits = self.linear(logits)
+        preLogits = self.blocks(x) # (B, T, nEmbed)
+        logits = self.layerNorm(preLogits) # (B, T, nEmbed)
+        logits = self.linear(logits) # (B, T, nVocab)
 
         if targets == None:
             return logits
@@ -126,10 +126,11 @@ class Model(nn.Module):
 
             return logits, loss
 
+    @torch.no_grad()
     def generate(self, idx, length):
         for _ in range(length):
-            idx_crop = idx[:, -HyprParams.nBlock:]
-            logits = self(idx_crop)
+            idx_crop = idx[:, -HyprParams.nBlock:] # (1, nBlock)
+            logits = self(idx_crop) # (1, nBlock, nVocab)
             probs = nnfunc.softmax(logits[:, -1, :], dim = 1)
             nextIdx = torch.multinomial(probs, num_samples = 1)
             idx = torch.cat((idx, nextIdx), dim = 1)
