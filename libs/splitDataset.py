@@ -1,13 +1,25 @@
 # Custom Libs
-from .loadDataset import file
-from .tokenizer import encode
 from .globals import HyprParams
 
 # External Libs
 import torch
+from Scribe import BytePairEncoder
 
-# Encoding the dataset
-data = torch.tensor(encode(file), dtype = torch.long, device = HyprParams.device)
+# Training the tokenizer
+print("Training Tokenizer...")
+BPE = BytePairEncoder()
+BPE.train("./datasets/ri.txt", HyprParams.nVocab - 256, False, True)
+print("Training Tokenizer... Done!")
+
+# Fetching the encoded (according to the tokenizer) dataset
+print("Encoding Data...")
+dataInTokens = []
+with open("./datasets/ri.txt", "r", encoding="utf-8") as buffer:
+    dataInString = buffer.read()
+    dataInTokens = BPE.encode(dataInString)
+print("Encoding Data... Done!")
+
+data = torch.tensor(dataInTokens, dtype = torch.long)
 
 # Setting the size of train/val/test splits
 nTrain = int(0.8 * data.shape[0])

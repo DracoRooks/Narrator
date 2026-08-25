@@ -15,19 +15,29 @@ def loadBatch(split: str = 'train') -> tuple[torch.Tensor, torch.Tensor]:
     xb = torch.stack([batchData[i : i + HyprParams.nBlock] for i in ix])
     yb = torch.stack([batchData[i + 1 : i + HyprParams.nBlock + 1] for i in ix])
 
-    return xb, yb
+    return xb.to(HyprParams.device), yb.to(HyprParams.device)
 
 # Estimating Evaluation Loss
 @torch.no_grad()
 def estimateLoss(model: Model):
     lossEstimates = []
     for split in ['train', 'eval']:
-        model.train()
+        model.train() if split == 'train' else model.eval() if split == 'eval' else None
         lossi = torch.zeros(HyprParams.evalIters)
         for i in range(HyprParams.evalIters):
             x, y = loadBatch(split)
             logits, loss = model(x, y)
             lossi[i] = loss
-        model.eval()
         lossEstimates.append(lossi.mean(dim = 0).item())
-    print(f"Train Loss Estimate: {lossEstimates[0]}, Val Loss Estimate: {lossEstimates[1]}")
+    model.train()
+    return f"Train Loss Estimate: {lossEstimates[0]:.4f}, Val Loss Estimate: {lossEstimates[1]:.4f}"
+
+def count_model_parameters(model: Model):
+    total_params = 0
+    # print(f"Length: {model.named_parameters(recurse=True)}")
+    for name, parameter in model.named_parameters(recurse=True):
+        if not parameter.requires_grad:
+            continue
+        params = parameter.numel()
+        total_params += params
+    return total_params
