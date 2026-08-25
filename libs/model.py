@@ -130,9 +130,19 @@ class Model(nn.Module):
     def generate(self, idx, length):
         for _ in range(length):
             idx_crop = idx[:, -HyprParams.nBlock:] # (1, nBlock)
+
+            # Computing logits
             logits = self(idx_crop) # (1, nBlock, nVocab)
-            probs = nnfunc.softmax(logits[:, -1, :], dim = 1)
-            nextIdx = torch.multinomial(probs, num_samples = 1)
-            idx = torch.cat((idx, nextIdx), dim = 1)
+            logits = logits[:, -1, :] # (1, 1, nVocab), logits of the last timestep
+            logits = logits.view(-1) # (nVocab), flattened
+
+            # Computing top K logits and setting the rest to negative inf
+            v, __ = torch.topk(logits, HyprParams.topk)
+            logits[logits < v[-1]] = float('-inf')
+
+            # Guessing the next token
+            probs = nnfunc.softmax(logits, dim = -1)
+            nextIdx = torch.multinomial(probs, num_samples = 1).view(1, -1)
+            idx = torch.cat((idx, nextIdx), dim = -1)
 
         return idx

@@ -4,14 +4,15 @@ from torch.optim import AdamW, lr_scheduler
 
 # Custom Libs
 from libs.globals import HyprParams
-from libs.tokenizer_cpp import tokenizer
 from libs.model import Model
-from libs.utils import loadBatch, estimateLoss
+from libs.splitDataset import BPE
+from libs.utils import loadBatch, estimateLoss, count_model_parameters
 
 # Order in the bleak world ruled by Chaos
 gen = torch.manual_seed(12345)
 
 model = Model().to(HyprParams.device)
+print(f"Total Trainable Params: {count_model_parameters(Model())}")
 
 optimizer = AdamW(model.parameters(), HyprParams.lr, weight_decay = HyprParams.pWeightDecay)
 lrScheduler = lr_scheduler.OneCycleLR(
@@ -48,7 +49,7 @@ print("Trained Parameter Configuration Saved!")
 
 print("Begining Inference...")
 model.eval()
-inputStr = 'Fang Yuan shouted with passion as he threw out a Gu Worm and yelled, "Liquor Worm Immortal Gu, Go!"'
-out = model.generate(torch.tensor(tokenizer.encode(inputStr)).view(1, -1), 1000)
-print(f"input: {tokenizer.decode(torch.tensor(tokenizer.encode(inputStr)).tolist()).decode("utf-8", "replace")}")
-print(f"output: {tokenizer.decode(out[0, len(inputStr):].tolist()).decode("utf-8", "replace")}")
+inputStr = '	He laughed ruthlessly as he said: "Star Constellation Immortal Venerable, I am going to kill all of Heavenly Court\'s'
+out = model.generate(torch.tensor(BPE.encode(inputStr)).view(1, -1).to(HyprParams.device), 1000)
+print(f"input: {BPE.decode(torch.tensor(BPE.encode(inputStr)).tolist())}")
+print(f"output: {BPE.decode(out[0, len(inputStr):].tolist())}")

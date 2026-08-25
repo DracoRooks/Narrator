@@ -14,18 +14,23 @@ class HyprParams:
     nHeads = 8
     pDrop = 0.1
     pWeightDecay = 0.012
-    lr = 8e-4
+
+    # Training Hyper Parameters
+    lr = 2e-4
     warmup = 0.1
-    initDivFactor = 16
+    initDivFactor = 20
     termDivFactor = 2e4
-    nEpochs = 1001
+    nEpochs = 801
 
     # Compute Device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    # Loss Estimation Iterations
+    # Loss Estimation Params
     evalIters = 20
     pEval = 0.1 # evaluate the model after what fraction of nEpochs
 
     # Vocab size set by tokenizer
     nVocab = 300 # Including the 256 byte level tokens
+
+    # Inference Hyper Params
+    topk = 100
