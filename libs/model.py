@@ -108,9 +108,11 @@ class Model(nn.Module):
         self.linear = nn.Linear(HyprParams.nEmbed, HyprParams.nVocab)
 
     def forward(self, idx: torch.Tensor, targets = None):
+        B, T = idx.size()
+
         tokEmbed = self.tokenEmbeddingTable(idx) # (B, T, nEmbed)
-        posEmbed = self.tokenEmbeddingTable(idx) # (B, T, nEmbed)
-        x = tokEmbed + posEmbed # (B, T, nEmbed)
+        posEmbed = self.positionEmbeddingTable(torch.arange(0, T, device = HyprParams.device)) # (T, nEmbed)
+        x = tokEmbed + posEmbed # (B, T, nEmbed) + (T, nEmbed) -> (B, T, nEmbed)
 
         preLogits = self.blocks(x) # (B, T, nEmbed)
         logits = self.layerNorm(preLogits) # (B, T, nEmbed)

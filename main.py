@@ -51,5 +51,13 @@ print("Begining Inference...")
 model.eval()
 inputStr = '	He laughed ruthlessly as he said: "Star Constellation Immortal Venerable, I am going to kill all of Heavenly Court\'s'
 out = model.generate(torch.tensor(BPE.encode(inputStr)).view(1, -1).to(HyprParams.device), 1000)
-print(f"input: {BPE.decode(torch.tensor(BPE.encode(inputStr)).tolist())}")
-print(f"output: {BPE.decode(out[0, len(inputStr):].tolist())}")
+
+def tokenToString(tokens: list[int]) -> str:
+    string = ''
+
+    for token in tokens:
+        string += chr(token)
+    return string
+
+print(f"input: {tokenToString(BPE.decode(torch.tensor(BPE.encode(inputStr)).tolist()))}")
+print(f"output: {tokenToString(BPE.decode(out[0, len(inputStr):].tolist()))}")
